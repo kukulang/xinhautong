@@ -283,6 +283,90 @@ class GradingExam(db.Model):
         }
 
 
+# ========= 试课管理 =========
+class TrialClass(db.Model):
+    """试听课"""
+    __tablename__ = "trial_classes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False, comment="试听班名称")
+    trial_date = db.Column(db.Date, nullable=False, comment="试听日期")
+    start_time = db.Column(db.String(8), default="09:00")
+    end_time = db.Column(db.String(8), default="10:30")
+    teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"))
+    classroom = db.Column(db.String(32), default="1号教室")
+    capacity = db.Column(db.Integer, default=6, comment="计划人数")
+    course_id = db.Column(db.Integer, db.ForeignKey("courses.id"))
+    status = db.Column(db.String(16), default="待预约",
+                       comment="待预约/预约中/已满员/已结束/已取消")
+    remark = db.Column(db.String(255), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    teacher = db.relationship("Teacher")
+    course = db.relationship("Course")
+    enrollments = db.relationship("TrialEnrollment", backref="trial",
+                                  cascade="all, delete-orphan")
+
+    def to_dict(self, with_enrollments=False):
+        signed = sum(1 for e in self.enrollments if e.status == "已签到")
+        absent = sum(1 for e in self.enrollments if e.status == "已缺席")
+        booked = len(self.enrollments)
+        waiting = booked - signed - absent
+        d = {
+            "id": self.id,
+            "name": self.name,
+            "trial_date": self.trial_date.isoformat(),
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "teacher_id": self.teacher_id,
+            "teacher_name": self.teacher.name if self.teacher else "未指定",
+            "classroom": self.classroom,
+            "capacity": self.capacity,
+            "course_id": self.course_id,
+            "course_name": self.course.name if self.course else "",
+            "status": self.status,
+            "remark": self.remark,
+            "stats": {
+                "capacity": self.capacity,
+                "booked": booked,
+                "waiting": waiting,
+                "signed": signed,
+                "absent": absent,
+            },
+        }
+        if with_enrollments:
+            d["enrollments"] = [e.to_dict() for e in self.enrollments]
+        return d
+
+
+class TrialEnrollment(db.Model):
+    """试听报名"""
+    __tablename__ = "trial_enrollments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    trial_id = db.Column(db.Integer, db.ForeignKey("trial_classes.id"), nullable=False)
+    child_name = db.Column(db.String(32), nullable=False, comment="小朋友姓名")
+    age = db.Column(db.Integer, default=5)
+    parent_phone = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(16), default="已预约",
+                       comment="已预约/已签到/已缺席")
+    remark = db.Column(db.String(255), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "trial_id": self.trial_id,
+            "child_name": self.child_name,
+            "age": self.age,
+            "parent_phone": self.parent_phone,
+            "phone_mask": self.parent_phone[:3] + "****" + self.parent_phone[-4:]
+                if len(self.parent_phone) >= 7 else self.parent_phone,
+            "status": self.status,
+            "remark": self.remark,
+        }
+
+
 # ========= 演出/活动管理 =========
 class Performance(db.Model):
     """演出 / 比赛活动"""

@@ -12,6 +12,7 @@ from config import Config
 from models import (
     db, Student, Teacher, Course, ClassGroup, Enrollment,
     Schedule, Attendance, Order, GradingExam, Performance,
+    TrialClass, TrialEnrollment,
 )
 
 
@@ -92,6 +93,10 @@ def register_routes(app: Flask):
     @app.route("/performances")
     def page_performances():
         return render_template("performances.html", active="performances")
+
+    @app.route("/trials")
+    def page_trials():
+        return render_template("trials.html", active="trials")
 
     # ========== Dashboard API ==========
     @app.route("/api/dashboard/stats")
@@ -579,6 +584,128 @@ def register_routes(app: Flask):
         db.session.delete(p)
         db.session.commit()
         return ok(msg="删除成功")
+
+
+    # ========== 试课管理 ==========
+    @app.route("/api/trials", methods=["GET"])
+    def list_trials():
+        month = request.args.get("month", "")  # yyyy-mm
+        kw = request.args.get("kw", "").strip()
+        status = request.args.get("status", "").strip()
+        teacher_id = request.args.get("teacher_id", "").strip()
+        classroom = request.args.get("classroom", "").strip()
+
+        q = TrialClass.query
+        if month:
+            try:
+                y, m = map(int, month.split("-"))
+                start = date(y, m, 1)
+                end = date(y + (m // 12), (m % 12) + 1, 1)
+                q = q.filter(TrialClass.trial_date >= start, TrialClass.trial_date < end)
+            except ValueError:
+                pass
+        if kw:
+            q = q.filter(TrialClass.name.contains(kw))
+        if status:
+            q = q.filter_by(status=status)
+        if teacher_id:
+            q = q.filter_by(teacher_id=int(teacher_id))
+        if classroom:
+            q = q.filter_by(classroom=classroom)
+        rows = q.order_by(TrialClass.trial_date, TrialClass.start_time).all()
+        return ok([r.to_dict() for r in rows])
+
+    @app.route("/api/trials/<int:tid>", methods=["GET"])
+    def get_trial(tid):
+        t = TrialClass.query.get_or_404(tid)
+        return ok(t.to_dict(with_enrollments=True))
+
+    @app.route("/api/trials", methods=["POST"])
+    def create_trial():
+        d = request.json or {}
+        if not d.get("name") or not d.get("trial_date"):
+            return fail("名称和日期必填")
+        t = TrialClass(
+            name=d["name"],
+            trial_date=parse_date(d["trial_date"]),
+            start_time=d.get("start_time", "09:00"),
+            end_time=d.get("end_time", "10:30"),
+            teacher_id=int(d["teacher_id"]) if d.get("teacher_id") else None,
+            classroom=d.get("classroom", "1号教室"),
+            capacity=int(d.get("capacity", 6)),
+            course_id=int(d["course_id"]) if d.get("course_id") else None,
+            status=d.get("status", "待预约"),
+            remark=d.get("remark", ""),
+        )
+        db.session.add(t)
+        db.session.commit()
+        return ok(t.to_dict(), "创建成功")
+
+    @app.route("/api/trials/<int:tid>", methods=["PUT"])
+    def update_trial(tid):
+        t = TrialClass.query.get_or_404(tid)
+        d = request.json or {}
+        for k in ["name", "start_time", "end_time", "classroom", "status", "remark"]:
+            if k in d:
+                setattr(t, k, d[k])
+        if "trial_date" in d:
+            t.trial_date = parse_date(d["trial_date"])
+        if "teacher_id" in d:
+            t.teacher_id = int(d["teacher_id"]) if d["teacher_id"] else None
+        if "course_id" in d:
+            t.course_id = int(d["course_id"]) if d["course_id"] else None
+        if "capacity" in d:
+            t.capacity = int(d["capacity"])
+        db.session.commit()
+        return ok(t.to_dict(), "更新成功")
+
+    @app.route("/api/trials/<int:tid>", methods=["DELETE"])
+    def delete_trial(tid):
+        t = TrialClass.query.get_or_404(tid)
+        db.session.delete(t)
+        db.session.commit()
+        return ok(msg="删除成功")
+
+    @app.route("/api/trials/<int:tid>/enrollments", methods=["POST"])
+    def add_trial_enrollment(tid):
+        t = TrialClass.query.get_or_404(tid)
+        d = request.json or {}
+        if not d.get("child_name") or not d.get("parent_phone"):
+            return fail("姓名和电话必填")
+        if len(t.enrollments) >= t.capacity:
+            return fail("试听名额已满")
+        e = TrialEnrollment(
+            trial_id=tid,
+            child_name=d["child_name"],
+            age=int(d.get("age", 5)),
+            parent_phone=d["parent_phone"],
+            status=d.get("status", "已预约"),
+            remark=d.get("remark", ""),
+        )
+        db.session.add(e)
+        if len(t.enrollments) + 1 >= t.capacity:
+            t.status = "已满员"
+        db.session.commit()
+        return ok(e.to_dict(), "添加成功")
+
+    @app.route("/api/trials/enrollments/<int:eid>", methods=["PUT"])
+    def update_trial_enrollment(eid):
+        e = TrialEnrollment.query.get_or_404(eid)
+        d = request.json or {}
+        for k in ["child_name", "parent_phone", "status", "remark"]:
+            if k in d:
+                setattr(e, k, d[k])
+        if "age" in d:
+            e.age = int(d["age"])
+        db.session.commit()
+        return ok(e.to_dict(), "更新成功")
+
+    @app.route("/api/trials/enrollments/<int:eid>", methods=["DELETE"])
+    def delete_trial_enrollment(eid):
+        e = TrialEnrollment.query.get_or_404(eid)
+        db.session.delete(e)
+        db.session.commit()
+        return ok(msg="移除成功")
 
 
 app = create_app()

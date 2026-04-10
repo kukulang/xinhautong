@@ -6,6 +6,7 @@ from app import app
 from models import (
     db, Student, Teacher, Course, ClassGroup, Enrollment,
     Schedule, Attendance, Order, GradingExam, Performance,
+    TrialClass, TrialEnrollment,
 )
 
 
@@ -172,7 +173,59 @@ def run():
                         status="筹备中"),
         ]
         db.session.add_all(performances)
+        db.session.commit()
 
+        # 试听课
+        trial_names = [
+            "春季启蒙试听班 A", "春季启蒙试听班 B", "周末试听试听班",
+            "周二晚间试听", "周四晚间试听", "周五晚间试听",
+            "周六亲子体验课", "金话筒体验班",
+        ]
+        classrooms = ["1号教室", "2号教室", "多功能厅", "演播室"]
+        statuses = ["待预约", "预约中", "预约中", "已满员"]
+        trials = []
+        for i, name in enumerate(trial_names):
+            t = TrialClass(
+                name=name,
+                trial_date=today + timedelta(days=random.randint(-3, 14)),
+                start_time=random.choice(["09:00", "10:00", "14:00", "16:00", "19:00"]),
+                end_time="",
+                teacher_id=random.choice(teachers).id,
+                classroom=random.choice(classrooms),
+                capacity=random.choice([4, 6, 8]),
+                course_id=random.choice(courses[:3]).id,
+                status=random.choice(statuses),
+                remark="",
+            )
+            # end_time 基于 start_time + 1.5h
+            sh, sm = map(int, t.start_time.split(":"))
+            eh = sh + 1
+            em = sm + 30
+            if em >= 60: eh += 1; em -= 60
+            t.end_time = f"{eh:02d}:{em:02d}"
+            trials.append(t)
+        db.session.add_all(trials)
+        db.session.commit()
+
+        # 试听学员
+        child_names = [("张小明","男"),("李小红","女"),("王小明","男"),("赵小美","女"),
+                       ("刘小乐","男"),("陈小佳","女"),("周小宝","男"),("吴小雅","女"),
+                       ("郑小杰","男"),("孙小萌","女")]
+        for t in trials:
+            n = random.randint(1, min(t.capacity, 5))
+            picks = random.sample(child_names, n)
+            for cn, _ in picks:
+                st = random.choice(["已预约", "已预约", "已签到", "已签到", "已缺席"])
+                db.session.add(TrialEnrollment(
+                    trial_id=t.id,
+                    child_name=cn,
+                    age=random.randint(4, 9),
+                    parent_phone=f"138{random.randint(10000000, 99999999)}",
+                    status=st,
+                ))
+            # 满员自动标记
+            if n >= t.capacity:
+                t.status = "已满员"
         db.session.commit()
         print(f"✅ 初始化完成: {len(students)}位学员, {len(teachers)}位教师, {len(courses)}门课程, {len(classes)}个班级")
 

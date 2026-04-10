@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>{% block title %}小主持教培业务系统{% endblock %}</title>
+    <title>{% block title %}童声飞扬 · 小主持教培业务系统{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}" rel="stylesheet">
@@ -13,28 +13,49 @@
     <aside class="sidebar">
         <div class="brand">
             <i class="bi bi-mic-fill"></i>
-            <span>小主持教培</span>
+            <span>童声飞扬</span>
         </div>
-        <nav class="nav flex-column">
-            <a class="nav-link {% if active=='dashboard' %}active{% endif %}" href="/"><i class="bi bi-speedometer2"></i> 工作台</a>
-            <a class="nav-link {% if active=='students' %}active{% endif %}" href="/students"><i class="bi bi-person-badge"></i> 学员管理</a>
-            <a class="nav-link {% if active=='teachers' %}active{% endif %}" href="/teachers"><i class="bi bi-person-workspace"></i> 教师管理</a>
-            <a class="nav-link {% if active=='courses' %}active{% endif %}" href="/courses"><i class="bi bi-book"></i> 课程管理</a>
-            <a class="nav-link {% if active=='classes' %}active{% endif %}" href="/classes"><i class="bi bi-people-fill"></i> 班级管理</a>
-            <a class="nav-link {% if active=='schedules' %}active{% endif %}" href="/schedules"><i class="bi bi-calendar-week"></i> 排课中心</a>
-            <a class="nav-link {% if active=='attendance' %}active{% endif %}" href="/attendance"><i class="bi bi-check2-square"></i> 考勤点评</a>
-            <a class="nav-link {% if active=='orders' %}active{% endif %}" href="/orders"><i class="bi bi-receipt"></i> 订单学费</a>
-            <a class="nav-link {% if active=='grading' %}active{% endif %}" href="/grading"><i class="bi bi-award"></i> 考级证书</a>
-            <a class="nav-link {% if active=='performances' %}active{% endif %}" href="/performances"><i class="bi bi-stars"></i> 演出活动</a>
+        <nav class="side-nav">
+            <div class="nav-group">
+                <div class="nav-group-title">业务中心</div>
+                <a class="nav-link {% if active=='dashboard' %}active{% endif %}" href="/"><i class="bi bi-pie-chart"></i> 业务概览</a>
+                <a class="nav-link {% if active=='courses' %}active{% endif %}" href="/courses"><i class="bi bi-book"></i> 课程管理</a>
+                <a class="nav-link {% if active=='trials' %}active{% endif %}" href="/trials"><i class="bi bi-mortarboard"></i> 试课管理</a>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">教务中心</div>
+                <a class="nav-link {% if active=='students' %}active{% endif %}" href="/students"><i class="bi bi-person-badge"></i> 学员管理</a>
+                <a class="nav-link {% if active=='teachers' %}active{% endif %}" href="/teachers"><i class="bi bi-person-workspace"></i> 师资管理</a>
+                <a class="nav-link {% if active=='classes' %}active{% endif %}" href="/classes"><i class="bi bi-people-fill"></i> 班级管理</a>
+                <a class="nav-link {% if active=='schedules' %}active{% endif %}" href="/schedules"><i class="bi bi-calendar-week"></i> 智能课表</a>
+                <a class="nav-link {% if active=='attendance' %}active{% endif %}" href="/attendance"><i class="bi bi-check2-square"></i> 考勤点评</a>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">财务中心</div>
+                <a class="nav-link {% if active=='orders' %}active{% endif %}" href="/orders"><i class="bi bi-receipt"></i> 订单学费</a>
+            </div>
+            <div class="nav-group">
+                <div class="nav-group-title">成长中心</div>
+                <a class="nav-link {% if active=='grading' %}active{% endif %}" href="/grading"><i class="bi bi-award"></i> 考级证书</a>
+                <a class="nav-link {% if active=='performances' %}active{% endif %}" href="/performances"><i class="bi bi-stars"></i> 演出活动</a>
+            </div>
         </nav>
-        <div class="footer-tip">© 新华童 · 童声飞扬</div>
+        <div class="footer-tip">© 童声飞扬 · v1.0</div>
     </aside>
 
     <main class="main">
         <header class="topbar">
-            <h5 class="m-0">{% block page_title %}{% endblock %}</h5>
-            <div>
-                <span class="text-muted me-3"><i class="bi bi-person-circle"></i> 管理员</span>
+            <div class="breadcrumb-title">
+                <i class="bi bi-house-door"></i>
+                <span class="sep">/</span>
+                <span>{% block page_title %}{% endblock %}</span>
+            </div>
+            <div class="topbar-right">
+                <i class="bi bi-bell"></i>
+                <div class="user-info">
+                    <div class="avatar">张</div>
+                    <span>张老师</span>
+                </div>
             </div>
         </header>
         <section class="content">
@@ -43,7 +64,6 @@
     </main>
 </div>
 
-<!-- 通用 Toast -->
 <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;">
   <div id="globalToast" class="toast align-items-center text-bg-primary border-0" role="alert">
     <div class="d-flex">

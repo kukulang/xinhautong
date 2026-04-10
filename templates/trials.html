@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+{% block page_title %}试课管理{% endblock %}
+{% block content %}
+<div class="trial-layout">
+
+    <!-- ========== 左列:日历 + 筛选 ========== -->
+    <div class="card-box filter-block">
+        <div class="calendar-head">
+            <button onclick="prevMonth()"><i class="bi bi-chevron-left"></i></button>
+            <div class="ym" id="calTitle">2026年4月</div>
+            <button onclick="nextMonth()"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <div class="calendar-grid" id="calGrid"></div>
+
+        <div class="filter-title"><i class="bi bi-funnel-fill"></i> 筛选条件</div>
+        <input id="f-kw" class="form-control" placeholder="🔍 试听班名称..." oninput="loadTrials()">
+        <select id="f-teacher" class="form-select" onchange="loadTrials()">
+            <option value="">全部教师</option>
+        </select>
+        <select id="f-classroom" class="form-select" onchange="loadTrials()">
+            <option value="">全部教室</option>
+            <option>1号教室</option><option>2号教室</option><option>多功能厅</option><option>演播室</option>
+        </select>
+        <select id="f-status" class="form-select" onchange="loadTrials()">
+            <option value="">全部状态</option>
+            <option>待预约</option><option>预约中</option><option>已满员</option><option>已结束</option>
+        </select>
+    </div>
+
+    <!-- ========== 中列:试课列表 ========== -->
+    <div class="card-box">
+        <div class="trial-list-head">
+            <h6>试听课次</h6>
+            <button class="btn btn-accent btn-sm" onclick="openAdd()"><i class="bi bi-plus-lg"></i> 新建</button>
+        </div>
+        <div id="trialList"></div>
+    </div>
+
+    <!-- ========== 右列:试课详情 ========== -->
+    <div class="card-box trial-detail" id="trialDetail">
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <div>请选择一个试听课次查看详情</div>
+        </div>
+    </div>
+
+</div>
+
+<!-- 新建/编辑试听 Modal -->
+<div class="modal fade" id="trialModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modalTitle">新建试听课</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><div class="row g-3">
+      <div class="col-12"><label class="form-label">名称*</label><input id="i-name" class="form-control" placeholder="如:春季启蒙试听班 A"></div>
+      <div class="col-6"><label class="form-label">日期*</label><input id="i-trial_date" type="date" class="form-control"></div>
+      <div class="col-3"><label class="form-label">开始</label><input id="i-start_time" type="time" class="form-control" value="09:00"></div>
+      <div class="col-3"><label class="form-label">结束</label><input id="i-end_time" type="time" class="form-control" value="10:30"></div>
+      <div class="col-6"><label class="form-label">主讲教师</label><select id="i-teacher_id" class="form-select"><option value="">未指定</option></select></div>
+      <div class="col-3"><label class="form-label">教室</label>
+        <select id="i-classroom" class="form-select"><option>1号教室</option><option>2号教室</option><option>多功能厅</option><option>演播室</option></select></div>
+      <div class="col-3"><label class="form-label">容量</label><input id="i-capacity" type="number" class="form-control" value="6"></div>
+      <div class="col-12"><label class="form-label">备注</label><input id="i-remark" class="form-control"></div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button class="btn btn-accent" onclick="saveTrial()">保存</button>
+    </div>
+  </div></div>
+</div>
+
+<!-- 添加试听学员 Modal -->
+<div class="modal fade" id="enrollModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">添加试听学员</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><div class="row g-3">
+      <div class="col-8"><label class="form-label">小朋友姓名*</label><input id="e-name" class="form-control"></div>
+      <div class="col-4"><label class="form-label">年龄</label><input id="e-age" type="number" class="form-control" value="5"></div>
+      <div class="col-12"><label class="form-label">家长电话*</label><input id="e-phone" class="form-control" placeholder="138xxxx1234"></div>
+      <div class="col-12"><label class="form-label">备注</label><input id="e-remark" class="form-control"></div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button class="btn btn-accent" onclick="saveEnrollment()">添加</button>
+    </div>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentYear = new Date().getFullYear();
+let currentMonth = new Date().getMonth() + 1;
+let selectedDay = null;
+let trials = [];
+let currentTrial = null;
+let editingTrial = null;
+
+const trialModalEl = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('trialModal'));
+const enrollModalEl = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('enrollModal'));
+
+async function init() {
+    const ts = await api.get('/api/teachers');
+    const opts = ts.data.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+    document.getElementById('f-teacher').innerHTML = '<option value="">全部教师</option>' + opts;
+    document.getElementById('i-teacher_id').innerHTML = '<option value="">未指定</option>' + opts;
+    await loadTrials();
+}
+
+// ====== 日历 ======
+function renderCalendar() {
+    document.getElementById('calTitle').textContent = `${currentYear}年${currentMonth}月`;
+    const first = new Date(currentYear, currentMonth - 1, 1);
+    const firstWeek = first.getDay();
+    const lastDate = new Date(currentYear, currentMonth, 0).getDate();
+    const prevLast = new Date(currentYear, currentMonth - 1, 0).getDate();
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    // 统计有试听课的日期
+    const dateSet = new Set(trials.map(t => t.trial_date));
+
+    const weeks = ['日','一','二','三','四','五','六'];
+    let html = weeks.map(w => `<div class="wk">${w}</div>`).join('');
+
+    // 上个月尾部
+    for (let i = firstWeek - 1; i >= 0; i--) {
+        html += `<div class="day other">${prevLast - i}</div>`;
+    }
+    // 当月
+    for (let d = 1; d <= lastDate; d++) {
+        const dstr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const cls = [
+            'day',
+            dstr === todayStr ? 'today' : '',
+            dateSet.has(dstr) ? 'has-trial' : '',
+            selectedDay === dstr ? 'selected' : '',
+        ].filter(Boolean).join(' ');
+        html += `<div class="${cls}" onclick="selectDay('${dstr}')">${d}</div>`;
+    }
+    // 下个月头部填充到 42 格
+    const total = firstWeek + lastDate;
+    const tail = (7 - total % 7) % 7;
+    for (let d = 1; d <= tail; d++) {
+        html += `<div class="day other">${d}</div>`;
+    }
+    document.getElementById('calGrid').innerHTML = html;
+}
+
+function prevMonth() {
+    currentMonth--;
+    if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+    loadTrials();
+}
+function nextMonth() {
+    currentMonth++;
+    if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+    loadTrials();
+}
+function selectDay(d) {
+    selectedDay = (selectedDay === d) ? null : d;
+    renderCalendar();
+    renderTrialList();
+}
+
+// ====== 试听列表 ======
+async function loadTrials() {
+    const month = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
+    const kw = document.getElementById('f-kw').value;
+    const teacher = document.getElementById('f-teacher').value;
+    const classroom = document.getElementById('f-classroom').value;
+    const status = document.getElementById('f-status').value;
+    const r = await api.get(`/api/trials?month=${month}&kw=${encodeURIComponent(kw)}&teacher_id=${teacher}&classroom=${classroom}&status=${status}`);
+    trials = r.data;
+    renderCalendar();
+    renderTrialList();
+    // 默认选中第一个
+    if (trials.length && (!currentTrial || !trials.find(t => t.id === currentTrial.id))) {
+        selectTrial(trials[0].id);
+    } else if (!trials.length) {
+        currentTrial = null;
+        renderDetail();
+    }
+}
+
+function renderTrialList() {
+    const list = selectedDay ? trials.filter(t => t.trial_date === selectedDay) : trials;
+    const el = document.getElementById('trialList');
+    if (!list.length) {
+        el.innerHTML = '<div class="empty-state"><i class="bi bi-calendar-x"></i><div>暂无试听课</div></div>';
+        return;
+    }
+    el.innerHTML = list.map(t => {
+        const md = t.trial_date.slice(5);
+        return `
+        <div class="trial-card ${currentTrial && currentTrial.id === t.id ? 'selected' : ''}" onclick="selectTrial(${t.id})">
+            <div class="t-name">${escapeHtml(t.name)}</div>
+            <div class="t-meta"><span><i class="bi bi-calendar3"></i>${md}</span><span><i class="bi bi-clock"></i>${t.start_time}-${t.end_time}</span></div>
+            <div class="t-meta"><span><i class="bi bi-geo-alt"></i>${t.classroom}</span><span><i class="bi bi-person"></i>${t.teacher_name}</span></div>
+            <div class="t-bottom">
+                <span class="t-count">试听:${t.stats.booked}/${t.stats.capacity}人</span>
+                ${statusTag(t.status)}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function selectTrial(id) {
+    const r = await api.get('/api/trials/' + id);
+    currentTrial = r.data;
+    renderTrialList();
+    renderDetail();
+}
+
+function renderDetail() {
+    const el = document.getElementById('trialDetail');
+    if (!currentTrial) {
+        el.innerHTML = '<div class="empty-state"><i class="bi bi-inbox"></i><div>请选择一个试听课次查看详情</div></div>';
+        return;
+    }
+    const t = currentTrial;
+    const s = t.stats;
+    el.innerHTML = `
+        <div class="detail-head">
+            <h4>${escapeHtml(t.name)} ${statusTag(t.status)}</h4>
+            <div>
+                <button class="btn btn-sm btn-outline-primary" onclick="editTrial()"><i class="bi bi-pencil"></i> 编辑</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="delTrial()"><i class="bi bi-trash"></i> 删除</button>
+            </div>
+        </div>
+        <div class="detail-info">
+            <div class="info-item"><i class="bi bi-calendar3"></i>${t.trial_date}</div>
+            <div class="info-item"><i class="bi bi-clock"></i>${t.start_time} - ${t.end_time}</div>
+            <div class="info-item"><i class="bi bi-person-workspace"></i>${t.teacher_name}</div>
+            <div class="info-item"><i class="bi bi-geo-alt"></i>${t.classroom}</div>
+        </div>
+        <div class="detail-stats">
+            <div class="stat-mini a"><div class="num">${s.capacity}</div><div class="lbl">计划人数</div></div>
+            <div class="stat-mini b"><div class="num">${s.booked}</div><div class="lbl">已预约</div></div>
+            <div class="stat-mini c"><div class="num">${s.waiting}</div><div class="lbl">待签到</div></div>
+            <div class="stat-mini d"><div class="num">${s.signed}</div><div class="lbl">已签到</div></div>
+        </div>
+        <div class="enroll-head">
+            <h6>试听学员 (${s.booked}人)</h6>
+            <button class="btn btn-accent btn-sm" onclick="openEnroll()"><i class="bi bi-plus-lg"></i> 添加学员</button>
+        </div>
+        <div>
+            ${t.enrollments.map(e => `
+                <div class="enroll-item">
+                    <div class="left">
+                        <div class="avatar">${e.child_name[0]}</div>
+                        <div class="info">
+                            <div class="name">${escapeHtml(e.child_name)} <small>${e.age}岁</small></div>
+                            <div class="phone"><i class="bi bi-telephone"></i>${e.phone_mask}</div>
+                        </div>
+                    </div>
+                    <div class="right">
+                        ${e.status === '已预约' ? `
+                            <button class="btn btn-sm btn-outline-success" onclick="enrollStatus(${e.id},'已签到')">签到</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="enrollStatus(${e.id},'已缺席')">缺席</button>
+                        ` : statusTag(e.status)}
+                        <button class="btn btn-sm btn-link text-danger" onclick="delEnroll(${e.id})"><i class="bi bi-x"></i></button>
+                    </div>
+                </div>
+            `).join('') || '<div class="empty-state"><i class="bi bi-people"></i><div>暂无试听学员,点击右上角添加</div></div>'}
+        </div>
+    `;
+}
+
+// ====== 新建/编辑试听 ======
+function openAdd() {
+    editingTrial = null;
+    document.getElementById('modalTitle').textContent = '新建试听课';
+    document.getElementById('i-name').value = '';
+    document.getElementById('i-trial_date').value = selectedDay || new Date().toISOString().slice(0,10);
+    document.getElementById('i-start_time').value = '09:00';
+    document.getElementById('i-end_time').value = '10:30';
+    document.getElementById('i-teacher_id').value = '';
+    document.getElementById('i-classroom').value = '1号教室';
+    document.getElementById('i-capacity').value = 6;
+    document.getElementById('i-remark').value = '';
+    trialModalEl().show();
+}
+function editTrial() {
+    if (!currentTrial) return;
+    editingTrial = currentTrial.id;
+    document.getElementById('modalTitle').textContent = '编辑试听课';
+    document.getElementById('i-name').value = currentTrial.name;
+    document.getElementById('i-trial_date').value = currentTrial.trial_date;
+    document.getElementById('i-start_time').value = currentTrial.start_time;
+    document.getElementById('i-end_time').value = currentTrial.end_time;
+    document.getElementById('i-teacher_id').value = currentTrial.teacher_id || '';
+    document.getElementById('i-classroom').value = currentTrial.classroom;
+    document.getElementById('i-capacity').value = currentTrial.capacity;
+    document.getElementById('i-remark').value = currentTrial.remark;
+    trialModalEl().show();
+}
+async function saveTrial() {
+    const d = {};
+    ['name','trial_date','start_time','end_time','teacher_id','classroom','capacity','remark']
+        .forEach(k => d[k] = document.getElementById('i-'+k).value);
+    const r = editingTrial
+        ? await api.put('/api/trials/'+editingTrial, d)
+        : await api.post('/api/trials', d);
+    if (r.code === 0) {
+        toast(r.msg, 'success');
+        trialModalEl().hide();
+        if (!editingTrial) currentTrial = null;
+        await loadTrials();
+        if (editingTrial) selectTrial(editingTrial);
+    } else toast(r.msg, 'danger');
+}
+async function delTrial() {
+    if (!currentTrial || !confirm('确认删除该试听课?')) return;
+    const r = await api.del('/api/trials/'+currentTrial.id);
+    if (r.code === 0) {
+        toast('删除成功', 'success');
+        currentTrial = null;
+        loadTrials();
+    }
+}
+
+// ====== 试听学员 ======
+function openEnroll() {
+    document.getElementById('e-name').value = '';
+    document.getElementById('e-age').value = 5;
+    document.getElementById('e-phone').value = '';
+    document.getElementById('e-remark').value = '';
+    enrollModalEl().show();
+}
+async function saveEnrollment() {
+    const d = {
+        child_name: document.getElementById('e-name').value,
+        age: document.getElementById('e-age').value,
+        parent_phone: document.getElementById('e-phone').value,
+        remark: document.getElementById('e-remark').value,
+    };
+    const r = await api.post(`/api/trials/${currentTrial.id}/enrollments`, d);
+    if (r.code === 0) {
+        toast('添加成功', 'success');
+        enrollModalEl().hide();
+        selectTrial(currentTrial.id);
+        loadTrials();
+    } else toast(r.msg, 'danger');
+}
+async function enrollStatus(eid, status) {
+    const r = await api.put(`/api/trials/enrollments/${eid}`, {status});
+    if (r.code === 0) selectTrial(currentTrial.id);
+}
+async function delEnroll(eid) {
+    if (!confirm('确认移除?')) return;
+    const r = await api.del(`/api/trials/enrollments/${eid}`);
+    if (r.code === 0) selectTrial(currentTrial.id);
+}
+
+init();
+</script>
+{% endblock %}
