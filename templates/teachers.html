@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block page_title %}教师管理{% endblock %}
+{% block content %}
+<div class="card-box">
+    <div class="toolbar">
+        <input id="f-kw" class="form-control" style="width:240px" placeholder="姓名 / 电话">
+        <button class="btn btn-outline-primary" onclick="loadList()"><i class="bi bi-search"></i> 查询</button>
+        <div class="ms-auto"><button class="btn btn-primary" onclick="openAdd()"><i class="bi bi-plus-lg"></i> 新增教师</button></div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead><tr>
+                <th>姓名</th><th>性别</th><th>电话</th><th>职称</th><th>擅长</th><th>入职日期</th><th>状态</th><th width="150">操作</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modalTitle">新增教师</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><div class="row g-3">
+      <div class="col-md-4"><label class="form-label">姓名*</label><input id="i-name" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label">性别</label>
+        <select id="i-gender" class="form-select"><option>女</option><option>男</option></select></div>
+      <div class="col-md-3"><label class="form-label">电话*</label><input id="i-phone" class="form-control"></div>
+      <div class="col-md-3"><label class="form-label">职称</label>
+        <select id="i-title" class="form-select"><option>初级讲师</option><option>中级讲师</option><option>高级讲师</option><option>金牌讲师</option></select></div>
+      <div class="col-md-6"><label class="form-label">擅长领域</label><input id="i-specialty" class="form-control" placeholder="如:气息训练、绕口令、舞台表演"></div>
+      <div class="col-md-3"><label class="form-label">入职日期</label><input id="i-hire_date" type="date" class="form-control"></div>
+      <div class="col-md-3"><label class="form-label">状态</label>
+        <select id="i-status" class="form-select"><option>在职</option><option>离职</option></select></div>
+      <div class="col-12"><label class="form-label">简介</label><textarea id="i-intro" class="form-control" rows="3"></textarea></div>
+    </div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button class="btn btn-primary" onclick="save()">保存</button></div>
+  </div></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let editing = null;
+const modal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal'));
+
+async function loadList() {
+    const kw = document.getElementById('f-kw').value;
+    const res = await api.get('/api/teachers?kw='+encodeURIComponent(kw));
+    document.getElementById('tbody').innerHTML = res.data.map(t => `
+        <tr>
+            <td><b>${escapeHtml(t.name)}</b></td>
+            <td>${t.gender}</td><td>${t.phone}</td>
+            <td><span class="tag tag-blue">${t.title}</span></td>
+            <td>${escapeHtml(t.specialty)}</td>
+            <td>${t.hire_date}</td>
+            <td>${statusTag(t.status)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick='openEdit(${JSON.stringify(t)})'>编辑</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="del(${t.id})">删除</button>
+            </td>
+        </tr>
+    `).join('') || '<tr><td colspan="8" class="text-center text-muted py-4">暂无数据</td></tr>';
+}
+
+function openAdd() {
+    editing = null;
+    document.getElementById('modalTitle').textContent = '新增教师';
+    ['name','phone','specialty','intro'].forEach(k => document.getElementById('i-'+k).value = '');
+    document.getElementById('i-gender').value = '女';
+    document.getElementById('i-title').value = '初级讲师';
+    document.getElementById('i-hire_date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('i-status').value = '在职';
+    modal().show();
+}
+function openEdit(t) {
+    editing = t.id;
+    document.getElementById('modalTitle').textContent = '编辑教师';
+    ['name','gender','phone','title','specialty','intro','hire_date','status'].forEach(k => document.getElementById('i-'+k).value = t[k] || '');
+    modal().show();
+}
+async function save() {
+    const d = {};
+    ['name','gender','phone','title','specialty','intro','hire_date','status'].forEach(k => d[k] = document.getElementById('i-'+k).value);
+    const res = editing ? await api.put('/api/teachers/'+editing, d) : await api.post('/api/teachers', d);
+    if (res.code === 0) { toast(res.msg,'success'); modal().hide(); loadList(); }
+    else toast(res.msg, 'danger');
+}
+async function del(id) {
+    if (!confirm('确认删除?')) return;
+    const r = await api.del('/api/teachers/'+id);
+    if (r.code === 0) { toast('删除成功','success'); loadList(); }
+}
+loadList();
+</script>
+{% endblock %}

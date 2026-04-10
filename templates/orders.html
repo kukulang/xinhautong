@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block page_title %}订单学费{% endblock %}
+{% block content %}
+<div class="card-box">
+    <div class="toolbar">
+        <select id="f-status" class="form-select" style="width:160px" onchange="loadList()">
+            <option value="">全部状态</option>
+            <option>待付款</option><option>已付款</option><option>已退款</option>
+        </select>
+        <div class="ms-auto"><button class="btn btn-primary" onclick="openAdd()"><i class="bi bi-plus-lg"></i> 新增订单</button></div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead><tr>
+                <th>订单号</th><th>学员</th><th>课程</th><th>金额</th><th>优惠</th>
+                <th>实付</th><th>支付方式</th><th>状态</th><th>创建/支付时间</th><th width="200">操作</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">新增订单</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><div class="row g-3">
+      <div class="col-12"><label class="form-label">学员*</label><select id="i-student_id" class="form-select"></select></div>
+      <div class="col-12"><label class="form-label">课程*</label><select id="i-course_id" class="form-select" onchange="fillAmount()"></select></div>
+      <div class="col-6"><label class="form-label">金额</label><input id="i-amount" type="number" class="form-control"></div>
+      <div class="col-6"><label class="form-label">优惠</label><input id="i-discount" type="number" class="form-control" value="0"></div>
+      <div class="col-6"><label class="form-label">支付方式</label>
+        <select id="i-pay_method" class="form-select"><option>微信</option><option>支付宝</option><option>现金</option><option>刷卡</option></select></div>
+      <div class="col-6"><label class="form-label">状态</label>
+        <select id="i-status" class="form-select"><option>待付款</option><option>已付款</option></select></div>
+      <div class="col-12"><label class="form-label">备注</label><input id="i-remark" class="form-control"></div>
+    </div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button class="btn btn-primary" onclick="save()">保存</button></div>
+  </div></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let courses = [];
+const modal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal'));
+
+async function init() {
+    const [stus, cs] = await Promise.all([api.get('/api/students'), api.get('/api/courses')]);
+    document.getElementById('i-student_id').innerHTML = stus.data.map(s => `<option value="${s.id}">${s.name} (${s.parent_phone})</option>`).join('');
+    courses = cs.data;
+    document.getElementById('i-course_id').innerHTML = cs.data.map(c => `<option value="${c.id}" data-price="${c.price}">${escapeHtml(c.name)} - ¥${c.price}</option>`).join('');
+    loadList();
+}
+
+function fillAmount() {
+    const sel = document.getElementById('i-course_id');
+    const price = sel.options[sel.selectedIndex].dataset.price;
+    document.getElementById('i-amount').value = price;
+}
+
+async function loadList() {
+    const status = document.getElementById('f-status').value;
+    const r = await api.get('/api/orders?status='+status);
+    document.getElementById('tbody').innerHTML = r.data.map(o => `
+        <tr>
+            <td><code>${o.order_no}</code></td>
+            <td>${escapeHtml(o.student_name)}</td>
+            <td>${escapeHtml(o.course_name)}</td>
+            <td>¥${o.amount}</td>
+            <td>¥${o.discount}</td>
+            <td class="text-danger fw-bold">¥${(o.amount - o.discount).toFixed(2)}</td>
+            <td>${o.pay_method}</td>
+            <td>${statusTag(o.status)}</td>
+            <td><small>${o.pay_time || o.created_at}</small></td>
+            <td>
+                ${o.status==='待付款' ? `<button class="btn btn-sm btn-success" onclick="pay(${o.id})">收款</button>` : ''}
+                ${o.status==='已付款' ? `<button class="btn btn-sm btn-warning" onclick="refund(${o.id})">退款</button>` : ''}
+                <button class="btn btn-sm btn-outline-danger" onclick="del(${o.id})">删除</button>
+            </td>
+        </tr>
+    `).join('') || '<tr><td colspan="10" class="text-center text-muted py-4">暂无订单</td></tr>';
+}
+
+function openAdd() {
+    document.getElementById('i-discount').value = 0;
+    document.getElementById('i-remark').value = '';
+    document.getElementById('i-pay_method').value = '微信';
+    document.getElementById('i-status').value = '待付款';
+    fillAmount();
+    modal().show();
+}
+async function save() {
+    const d = {};
+    ['student_id','course_id','amount','discount','pay_method','status','remark'].forEach(k => d[k] = document.getElementById('i-'+k).value);
+    const r = await api.post('/api/orders', d);
+    if (r.code === 0) { toast(r.msg,'success'); modal().hide(); loadList(); }
+    else toast(r.msg,'danger');
+}
+async function pay(id) {
+    const r = await api.post(`/api/orders/${id}/pay`);
+    if (r.code === 0) { toast('收款成功','success'); loadList(); }
+}
+async function refund(id) {
+    if (!confirm('确认退款?')) return;
+    const r = await api.post(`/api/orders/${id}/refund`);
+    if (r.code === 0) { toast('退款成功','success'); loadList(); }
+}
+async function del(id) {
+    if (!confirm('确认删除订单?')) return;
+    const r = await api.del('/api/orders/'+id);
+    if (r.code === 0) { toast('删除成功','success'); loadList(); }
+}
+init();
+</script>
+{% endblock %}

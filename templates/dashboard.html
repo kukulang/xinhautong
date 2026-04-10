@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block page_title %}工作台{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-3 col-6">
+        <div class="stat-card">
+            <div>
+                <div class="label">在读学员</div>
+                <div class="value" id="stat-students">-</div>
+            </div>
+            <i class="bi bi-emoji-smile icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="stat-card c2">
+            <div>
+                <div class="label">在职教师</div>
+                <div class="value" id="stat-teachers">-</div>
+            </div>
+            <i class="bi bi-person-workspace icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="stat-card c3">
+            <div>
+                <div class="label">开课班级</div>
+                <div class="value" id="stat-classes">-</div>
+            </div>
+            <i class="bi bi-people-fill icon"></i>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="stat-card c4">
+            <div>
+                <div class="label">本月收入(元)</div>
+                <div class="value" id="stat-income">-</div>
+            </div>
+            <i class="bi bi-cash-coin icon"></i>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-md-8">
+        <div class="card-box">
+            <div class="card-title">近7天新增学员</div>
+            <div id="chart-trend" style="height:280px"></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card-box">
+            <div class="card-title">学员等级分布</div>
+            <div id="chart-level" style="height:280px"></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card-box">
+            <div class="card-title">快捷数据</div>
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2"><i class="bi bi-calendar-event text-primary"></i> 今日课程:<b id="stat-today">-</b> 节</li>
+                <li class="mb-2"><i class="bi bi-person-plus text-success"></i> 本月新增学员:<b id="stat-newstu">-</b> 人</li>
+                <li class="mb-2"><i class="bi bi-award text-warning"></i> 待考级学员:<b id="stat-pexam">-</b> 人</li>
+                <li class="mb-2"><i class="bi bi-book text-info"></i> 在售课程:<b id="stat-courses">-</b> 门</li>
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card-box">
+            <div class="card-title">业务说明</div>
+            <p class="text-muted mb-1" style="font-size:13px;line-height:1.8">
+                本系统为少儿小主持人培训机构业务管理系统,覆盖学员档案、教师管理、课程体系、
+                班级排课、课堂考勤、学费订单、等级考试、汇报演出等全业务闭环。
+            </p>
+            <p class="text-muted mb-0" style="font-size:13px">小主持课程等级:启蒙级 → 初级 → 中级 → 高级 → 金牌级</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadDashboard() {
+    const res = await api.get('/api/dashboard/stats');
+    if (res.code !== 0) return;
+    const d = res.data;
+    document.getElementById('stat-students').textContent = d.student_total;
+    document.getElementById('stat-teachers').textContent = d.teacher_total;
+    document.getElementById('stat-classes').textContent = d.class_total;
+    document.getElementById('stat-income').textContent = Number(d.month_income).toFixed(0);
+    document.getElementById('stat-today').textContent = d.today_lessons;
+    document.getElementById('stat-newstu').textContent = d.month_new_students;
+    document.getElementById('stat-pexam').textContent = d.pending_exams;
+    document.getElementById('stat-courses').textContent = d.course_total;
+
+    // 趋势图
+    echarts.init(document.getElementById('chart-trend')).setOption({
+        tooltip: {trigger: 'axis'},
+        grid: {left: 40, right: 20, top: 20, bottom: 30},
+        xAxis: {type: 'category', data: d.enroll_trend.map(i => i.date)},
+        yAxis: {type: 'value', minInterval: 1},
+        series: [{
+            type: 'line', smooth: true,
+            data: d.enroll_trend.map(i => i.count),
+            areaStyle: {color: 'rgba(255,107,154,0.2)'},
+            lineStyle: {color: '#ff6b9a'},
+            itemStyle: {color: '#ff6b9a'},
+        }]
+    });
+
+    // 等级饼图
+    echarts.init(document.getElementById('chart-level')).setOption({
+        tooltip: {trigger: 'item'},
+        legend: {bottom: 0, textStyle: {fontSize: 11}},
+        series: [{
+            type: 'pie', radius: ['40%', '65%'],
+            data: d.level_dist.map(i => ({name: i.level, value: i.count})),
+            label: {formatter: '{b}: {c}'},
+            color: ['#ff6b9a', '#4cc9a4', '#4895ef', '#ffd166', '#a78bfa', '#f472b6'],
+        }]
+    });
+}
+loadDashboard();
+</script>
+{% endblock %}

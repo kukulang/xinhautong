@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block page_title %}学员管理{% endblock %}
+{% block content %}
+<div class="card-box">
+    <div class="toolbar">
+        <input id="f-kw" class="form-control" style="width:220px" placeholder="姓名 / 家长电话">
+        <select id="f-level" class="form-select" style="width:140px">
+            <option value="">全部等级</option>
+            <option>启蒙级</option><option>初级</option><option>中级</option>
+            <option>高级</option><option>金牌级</option>
+        </select>
+        <select id="f-status" class="form-select" style="width:140px">
+            <option value="">全部状态</option>
+            <option>在读</option><option>休学</option><option>结业</option>
+        </select>
+        <button class="btn btn-outline-primary" onclick="loadList()"><i class="bi bi-search"></i> 查询</button>
+        <div class="ms-auto">
+            <button class="btn btn-primary" onclick="openAdd()"><i class="bi bi-plus-lg"></i> 新增学员</button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>姓名</th><th>性别</th><th>年龄</th><th>家长电话</th>
+                    <th>当前等级</th><th>就读学校</th><th>入学日期</th>
+                    <th>状态</th><th width="150">操作</th>
+                </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 编辑 Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="modalTitle">新增学员</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">姓名*</label><input id="i-name" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label">性别</label>
+            <select id="i-gender" class="form-select"><option>男</option><option>女</option></select></div>
+          <div class="col-md-3"><label class="form-label">生日</label><input id="i-birthday" type="date" class="form-control"></div>
+          <div class="col-md-4"><label class="form-label">家长姓名</label><input id="i-parent_name" class="form-control"></div>
+          <div class="col-md-4"><label class="form-label">家长电话*</label><input id="i-parent_phone" class="form-control"></div>
+          <div class="col-md-4"><label class="form-label">就读学校</label><input id="i-school" class="form-control"></div>
+          <div class="col-md-4"><label class="form-label">当前等级</label>
+            <select id="i-level" class="form-select">
+              <option>启蒙级</option><option>初级</option><option>中级</option><option>高级</option><option>金牌级</option>
+            </select></div>
+          <div class="col-md-4"><label class="form-label">入学日期</label><input id="i-enroll_date" type="date" class="form-control"></div>
+          <div class="col-md-4"><label class="form-label">状态</label>
+            <select id="i-status" class="form-select"><option>在读</option><option>休学</option><option>结业</option></select></div>
+          <div class="col-12"><label class="form-label">家庭住址</label><input id="i-address" class="form-control"></div>
+          <div class="col-12"><label class="form-label">备注</label><textarea id="i-remark" class="form-control" rows="2"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" onclick="save()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let editing = null;
+const modal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal'));
+
+async function loadList() {
+    const kw = document.getElementById('f-kw').value;
+    const level = document.getElementById('f-level').value;
+    const status = document.getElementById('f-status').value;
+    const res = await api.get(`/api/students?kw=${kw}&level=${level}&status=${status}`);
+    const tb = document.getElementById('tbody');
+    tb.innerHTML = res.data.map(s => `
+        <tr>
+            <td><b>${escapeHtml(s.name)}</b></td>
+            <td>${s.gender}</td>
+            <td>${s.age || '-'}</td>
+            <td>${s.parent_phone}</td>
+            <td><span class="tag tag-pink">${s.level}</span></td>
+            <td>${escapeHtml(s.school)}</td>
+            <td>${s.enroll_date}</td>
+            <td>${statusTag(s.status)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick='openEdit(${JSON.stringify(s)})'>编辑</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="del(${s.id})">删除</button>
+            </td>
+        </tr>
+    `).join('') || '<tr><td colspan="9" class="text-center text-muted py-4">暂无数据</td></tr>';
+}
+
+function openAdd() {
+    editing = null;
+    document.getElementById('modalTitle').textContent = '新增学员';
+    ['name','parent_name','parent_phone','school','address','remark','birthday'].forEach(k => document.getElementById('i-'+k).value = '');
+    document.getElementById('i-gender').value = '男';
+    document.getElementById('i-level').value = '启蒙级';
+    document.getElementById('i-enroll_date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('i-status').value = '在读';
+    modal().show();
+}
+
+function openEdit(s) {
+    editing = s.id;
+    document.getElementById('modalTitle').textContent = '编辑学员';
+    ['name','gender','parent_name','parent_phone','school','address','remark','level','status','birthday','enroll_date'].forEach(k => {
+        document.getElementById('i-'+k).value = s[k] || '';
+    });
+    modal().show();
+}
+
+async function save() {
+    const data = {};
+    ['name','gender','parent_name','parent_phone','school','address','remark','level','status','birthday','enroll_date'].forEach(k => {
+        data[k] = document.getElementById('i-'+k).value;
+    });
+    const res = editing
+        ? await api.put('/api/students/'+editing, data)
+        : await api.post('/api/students', data);
+    if (res.code === 0) {
+        toast(res.msg, 'success');
+        modal().hide();
+        loadList();
+    } else {
+        toast(res.msg, 'danger');
+    }
+}
+
+async function del(id) {
+    if (!confirm('确认删除该学员?')) return;
+    const res = await api.del('/api/students/'+id);
+    if (res.code === 0) { toast('删除成功', 'success'); loadList(); }
+}
+
+loadList();
+</script>
+{% endblock %}

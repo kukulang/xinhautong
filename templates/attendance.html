@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block page_title %}考勤点评{% endblock %}
+{% block content %}
+<div class="card-box">
+    <div class="toolbar">
+        <label class="form-label mb-0">选择课次</label>
+        <select id="sel-schedule" class="form-select" style="width:520px" onchange="loadAttendance()"></select>
+    </div>
+    <div id="schedule-info" class="text-muted small mb-2"></div>
+    <div class="table-responsive">
+        <table class="table table-bordered">
+            <thead><tr>
+                <th width="80">头像</th><th>学员姓名</th><th width="200">考勤状态</th>
+                <th width="160">课堂表现分</th><th>教师点评</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+    <div class="text-end">
+        <button class="btn btn-primary px-4" onclick="saveAll()"><i class="bi bi-check-circle"></i> 保存考勤</button>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let currentSchedule = null, rows = [];
+
+async function init() {
+    const r = await api.get('/api/schedules');
+    const sel = document.getElementById('sel-schedule');
+    sel.innerHTML = r.data.map(x =>
+        `<option value="${x.id}">${x.lesson_date} ${x.start_time} - ${x.class_name} (${x.topic||'无主题'})</option>`
+    ).join('');
+    // 支持url ?sid=xx
+    const qs = new URLSearchParams(location.search);
+    if (qs.get('sid')) sel.value = qs.get('sid');
+    loadAttendance();
+}
+
+async function loadAttendance() {
+    const sid = document.getElementById('sel-schedule').value;
+    if (!sid) return;
+    const r = await api.get(`/api/schedules/${sid}/attendance`);
+    currentSchedule = r.data.schedule;
+    rows = r.data.list;
+    document.getElementById('schedule-info').innerHTML =
+        `<i class="bi bi-info-circle"></i> 班级:${currentSchedule.class_name} | 教师:${currentSchedule.teacher_name} | 日期:${currentSchedule.lesson_date} ${currentSchedule.start_time}-${currentSchedule.end_time}`;
+    render();
+}
+
+function render() {
+    document.getElementById('tbody').innerHTML = rows.map((row, i) => `
+        <tr>
+            <td><div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${row.student_name[0]}</div></td>
+            <td><b>${row.student_name}</b></td>
+            <td>
+                <select class="form-select form-select-sm" onchange="rows[${i}].status=this.value">
+                    <option ${row.status==='出勤'?'selected':''}>出勤</option>
+                    <option ${row.status==='迟到'?'selected':''}>迟到</option>
+                    <option ${row.status==='请假'?'selected':''}>请假</option>
+                    <option ${row.status==='缺勤'?'selected':''}>缺勤</option>
+                </select>
+            </td>
+            <td><input type="number" min="0" max="100" class="form-control form-control-sm" value="${row.score}" onchange="rows[${i}].score=this.value"></td>
+            <td><input class="form-control form-control-sm" value="${escapeHtml(row.comment)}" onchange="rows[${i}].comment=this.value" placeholder="课堂表现点评"></td>
+        </tr>
+    `).join('') || '<tr><td colspan="5" class="text-center text-muted py-4">该课次班级暂无学员</td></tr>';
+}
+
+async function saveAll() {
+    if (!currentSchedule) return;
+    const r = await api.post(`/api/schedules/${currentSchedule.id}/attendance`, rows);
+    if (r.code === 0) toast('考勤已保存', 'success');
+    else toast(r.msg, 'danger');
+}
+
+init();
+</script>
+{% endblock %}
